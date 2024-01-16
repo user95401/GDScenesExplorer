@@ -331,7 +331,24 @@ void draw() {
 
 			ImGui::EndChild();
 		}
-		ImGui::End();
+
+		//inf
+		{
+			ImGui::Text("\n""GD Scenes Explorer its a port of CocosExplorer by Mat");
+
+			ImGui::BeginListBox("");
+			ImGui::Text(
+				/*/*/"Keys:"
+				"\n" "* F1 - Show this window"
+				"\n" "* SHIFT - Highlight"
+				"\n" "* W/A/S/D - Move selected node"
+				"\n" "* Q/E - Rotate selected node"
+				"\n" "* R - Reset selected node"
+			);
+			ImGui::EndListBox();
+		};
+
+		ImGui::End();//- GD Scenes Explorer -
 
 		//highlight
 		bool VK_SHIFT_STATE = (GetAsyncKeyState(VK_SHIFT) & 0x8000);
@@ -340,6 +357,30 @@ void draw() {
 				render_node_highlight(selected_node, true);
 			if (hovered_node)
 				render_node_highlight(hovered_node, false);
+		}
+
+		//update_node_by_key
+		if (selected_node) update_node_by_key(selected_node);
+
+		//inf text
+		{
+			ImGuiIO& io = ImGui::GetIO();
+			ImGui::SetNextWindowPos(ImVec2(10, (io.DisplaySize.y) - 10), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+			ImGui::Begin("", nullptr,
+				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize
+			);
+			if (ImGui::SmallButton("Release: v1")) {
+				CCApplication::sharedApplication()->openURL("https://github.com/user95401/GDScenesExplorer/releases");
+			}
+			ImGui::SameLine();
+			ImGui::Text(std::format(
+				"PosStep: {}, RotStep: {}, HaveSelectedNode: {}, HaveHoveredNode: {}",
+				round(update_node_pos_step * 1000) / 1000,
+				round(update_node_rot_step * 1000) / 1000,
+				(bool)selected_node,
+				(bool)hovered_node
+			).c_str());
+			ImGui::End();
 		}
 	}
 
@@ -356,12 +397,22 @@ void draw() {
 
 #include <fstream>
 void init() {
+	if (!std::filesystem::exists("GDScenesExplorer.ini")) {
+		std::ofstream("GDScenesExplorer.ini") <<
+			"[Window][- GD Scenes Explorer -]\n"
+			"Pos=10,10\n"
+			"Size=926,768\n"
+			;
+	}
+	ImGui::GetIO().IniFilename = "GDScenesExplorer.ini";
+
 	auto& style = ImGui::GetStyle();
 	style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
 	style.WindowBorderSize = 0;
 	style.ColorButtonPosition = ImGuiDir_Left;
 
-	g_font = ImGui::GetIO().Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 14.f);
+	g_font = ImGui::GetIO().Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\comic.ttf", 22.f);
+	g_font->Scale = 1.0f;
 
 	auto colors = style.Colors;
 	colors[ImGuiCol_FrameBg] = ImVec4(0.31f, 0.31f, 0.31f, 0.54f);
