@@ -9,8 +9,24 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 #include <filesystem>
 #include "utils.hpp"
+#include "ModUtils.hpp"
+#include "HooksUtils.hpp"
 
 using namespace cocos2d;
+
+/*
+CCNode* curScene = pCCNode;
+if (curScene) {
+	generateTree(curScene);
+}
+*/
+CCNode* pCCNode;
+inline CCScene* (__cdecl* CCScene_create)();
+CCScene* CCScene_create_H() {
+	CCScene* pCCScene = CCScene_create();
+	pCCNode = pCCScene;
+	return pCCScene;
+}
 
 const char* get_node_name(CCNode* node) {
 	// works because msvc's typeid().name() returns undecorated name
@@ -24,7 +40,27 @@ static CCNode* selected_node = nullptr;
 static bool reached_selected_node = false;
 static CCNode* hovered_node = nullptr;
 
+CCPoint OldAnchorPoint;
+CCPoint OldPosition;
+float OldRotation;
+float OldScaleX;
+float OldScaleY;
+CCSize OldContentSize;
+bool OldVisible;
+
+void SaveOldPropertiesStore(CCNode* node) {
+	if (!node) return;
+	OldAnchorPoint = node->getAnchorPoint();
+	OldPosition = (node->getPosition());
+	OldRotation = (node->getRotation());
+	OldScaleX = (node->getScaleX());
+	OldScaleY = (node->getScaleY());
+	OldContentSize = (node->getContentSize());
+	OldVisible = (node->isVisible());
+}
+
 void render_node_tree(CCNode* node, unsigned int index = 0) {
+	if (!node) return;
 	std::stringstream stream;
 	stream << "[" << index << "] " << get_node_name(node);
 	if (node->getTag() != -1)
@@ -41,13 +77,15 @@ void render_node_tree(CCNode* node, unsigned int index = 0) {
 	if (node->getChildrenCount() == 0)
 		flags |= ImGuiTreeNodeFlags_Leaf;
 
-	ImGui::PushStyleColor(ImGuiCol_Text, node->isVisible() ? ImVec4 { 1.f, 1.f, 1.f, 1.f } : ImVec4 { 0.8f, 0.8f, 0.8f, 1.f });
+	ImGui::PushStyleColor(ImGuiCol_Text, node->isVisible() ? ImVec4{ 1.f, 1.f, 1.f, 1.f } : ImVec4{ 0.8f, 0.8f, 0.8f, 1.f });
 	const bool is_open = ImGui::TreeNodeEx(node, flags, stream.str().c_str());
 	if (ImGui::IsItemClicked()) {
-		if (node == selected_node && ImGui::GetIO().KeyAlt) {
+		if (node == selected_node) {
 			selected_node = nullptr;
 			reached_selected_node = false;
-		} else {
+		}
+		else {
+			SaveOldPropertiesStore(node);
 			selected_node = node;
 			reached_selected_node = true;
 		}
@@ -69,9 +107,21 @@ void render_node_tree(CCNode* node, unsigned int index = 0) {
 #define CONCAT(a, b) CONCAT_(a, b)
 
 void render_node_properties(CCNode* node) {
+	if (!node) return;
 	if (ImGui::Button("Delete")) {
 		node->removeFromParentAndCleanup(true);
 		return;
+	}
+	ImGui::SameLine();
+	bool R = (GetAsyncKeyState(0x52) & 0x8000);
+	if (ImGui::Button("Reset All") or R) {
+		node->setAnchorPoint(OldAnchorPoint);
+		node->setPosition(OldPosition);
+		node->setRotation(OldRotation);
+		node->setScaleX(OldScaleX);
+		node->setScaleY(OldScaleY);
+		node->setContentSize(OldContentSize);
+		node->setVisible(OldVisible);
 	}
 	ImGui::Text("Addr: 0x%p", node);
 	ImGui::SameLine();
@@ -142,14 +192,14 @@ void render_node_properties(CCNode* node) {
 				static_cast<GLubyte>(colorValues[0] * 255),
 				static_cast<GLubyte>(colorValues[1] * 255),
 				static_cast<GLubyte>(colorValues[2] * 255)
-			});
+				});
 			rgba_node->setOpacity(static_cast<GLubyte>(colorValues[3] * 255.f));
 		}
 	}
-	
+
 	if (auto label_node = dynamic_cast<CCLabelProtocol*>(node); label_node) {
 		std::string str = label_node->getString();
-		if (ImGui::InputTextMultiline("Text", &str, {0, 50}))
+		if (ImGui::InputTextMultiline("Text", &str, { 0, 50 }))
 			label_node->setString(str.c_str());
 	}
 
@@ -190,6 +240,7 @@ void render_node_properties(CCNode* node) {
 }
 
 void render_node_highlight(CCNode* node, bool selected) {
+	if (!node) return;
 	auto& foreground = *ImGui::GetForegroundDrawList();
 	auto parent = node->getParent();
 	auto bounding_box = node->boundingBox();
@@ -214,6 +265,32 @@ void render_node_highlight(CCNode* node, bool selected) {
 	foreground.AddRectFilled(min, max, selected ? IM_COL32(200, 200, 255, 60) : IM_COL32(255, 255, 255, 70));
 }
 
+double update_node_pos_step;
+double update_node_rot_step;
+void update_node_by_key(CCNode* node) {
+	if (!node) return;
+	//delay
+	Sleep(3);
+	//pos
+	bool W = (GetAsyncKeyState(0x57) & 0x8000);
+	bool S = (GetAsyncKeyState(0x53) & 0x8000);
+	bool D = (GetAsyncKeyState(0x44) & 0x8000);
+	bool A = (GetAsyncKeyState(0x41) & 0x8000);
+	if (W) node->setPositionY(node->getPositionY() + update_node_pos_step);
+	if (S) node->setPositionY(node->getPositionY() - update_node_pos_step);
+	if (D) node->setPositionX(node->getPositionX() + update_node_pos_step);
+	if (A) node->setPositionX(node->getPositionX() - update_node_pos_step);
+	if (!W && !A && !S && !D) update_node_pos_step = 0.001;
+	else update_node_pos_step = update_node_pos_step + 0.01;
+	//rot
+	bool Q = (GetAsyncKeyState(0x51) & 0x8000);
+	bool E = (GetAsyncKeyState(0x45) & 0x8000);
+	if (Q) node->setRotation(node->getRotation() - update_node_rot_step);
+	if (E) node->setRotation(node->getRotation() + update_node_rot_step);
+	if (!Q && !E) update_node_rot_step = 0.001;
+	else update_node_rot_step = update_node_rot_step + 0.01;
+}
+
 bool show_window = false;
 static ImFont* g_font = nullptr;
 
@@ -222,20 +299,22 @@ void draw() {
 	if (show_window) {
 		static bool highlight = false;
 		hovered_node = nullptr;
-		if (ImGui::Begin("cocos2d explorer", nullptr, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar)) {
-			if (ImGui::BeginMenuBar()) {
-				ImGui::MenuItem("Highlight", nullptr, &highlight);
-				ImGui::EndMenuBar();
-			}
+		if (ImGui::Begin("- GD Scenes Explorer -", nullptr, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar)) {
+			
+			ImGui::BeginMenuBar();
+			ImGui::MenuItem("Highlight", nullptr, &highlight);
+			ImGui::EndMenuBar();
 
 			const auto avail = ImGui::GetContentRegionAvail();
 
 			ImGui::BeginChild("explorer.tree", ImVec2(avail.x * 0.5f, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 
-			auto node = CCDirector::sharedDirector()->getRunningScene();
-			reached_selected_node = false;
-			render_node_tree(node);
-			
+			CCNode* node = pCCNode;
+			if (node) {
+				reached_selected_node = false;
+				render_node_tree(node);
+			}
+
 			ImGui::EndChild();
 
 			if (!reached_selected_node)
@@ -245,16 +324,18 @@ void draw() {
 
 			ImGui::BeginChild("explorer.options");
 
-			if (selected_node)
+			if (selected_node) {
 				render_node_properties(selected_node);
-			else
-				ImGui::Text("Select a node to edit its properties :-)");
+			}
+			else ImGui::Text("Select a node to edit its properties");
 
 			ImGui::EndChild();
 		}
 		ImGui::End();
 
-		if (highlight && (selected_node || hovered_node)) {
+		//highlight
+		bool VK_SHIFT_STATE = (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+		if ((highlight || VK_SHIFT_STATE) && (selected_node || hovered_node)) {
 			if (selected_node)
 				render_node_highlight(selected_node, true);
 			if (hovered_node)
@@ -263,16 +344,17 @@ void draw() {
 	}
 
 	if (ImGui::GetTime() < 5.0) {
-		ImGui::SetNextWindowPos({10, 10});
-		ImGui::Begin("cocosexplorermsg", nullptr,
+		ImGui::SetNextWindowPos({ 10, 10 });
+		ImGui::Begin("", nullptr,
 			ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
 			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings);
-		ImGui::Text("Cocos explorer loaded, press F1 to toggle");
+		ImGui::Text("GD Scenes Explorer loaded, press F1 to toggle");
 		ImGui::End();
 	}
 	if (g_font) ImGui::PopFont();
 }
 
+#include <fstream>
 void init() {
 	auto& style = ImGui::GetStyle();
 	style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
@@ -290,8 +372,10 @@ void init() {
 	colors[ImGuiCol_TextSelectedBg] = ImVec4(0.71f, 0.71f, 0.71f, 0.35f);
 }
 
-
 DWORD WINAPI my_thread(void* hModule) {
+	//ImGuiHookstp
+	ImGuiHook::setInitFunction(init);
+	ImGuiHook::setToggleKey(VK_F1);
 	ImGuiHook::setRenderFunction(draw);
 	ImGuiHook::setToggleCallback([]() {
 		show_window = !show_window;
@@ -299,17 +383,14 @@ DWORD WINAPI my_thread(void* hModule) {
 	ImGuiHook::setInitFunction(init);
 	MH_Initialize();
 	ImGuiHook::setupHooks([](void* target, void* hook, void** trampoline) {
-		MH_CreateHook(target, hook, trampoline);
+		HooksUtils::CreateHook(target, hook, trampoline);
 	});
-	ImGuiHook::setKeybind(VK_F1);
-	MH_EnableHook(MH_ALL_HOOKS);
+	CC_HOOK("?create@CCScene@cocos2d@@SAPAV12@XZ", CCScene_create);
 	return 0;
 }
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
-	if (reason == DLL_PROCESS_ATTACH) {
-		DisableThreadLibraryCalls(module);
-		CreateThread(0, 0, my_thread, module, 0, 0);
-	}
+	if (reason != DLL_PROCESS_ATTACH) return TRUE;
+	CreateThread(0, 0, my_thread, module, 0, 0);
 	return TRUE;
 }

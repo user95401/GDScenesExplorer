@@ -1,23 +1,32 @@
-cmake_minimum_required(VERSION 3.0.0)
-set(CMAKE_CXX_STANDARD 17)
+﻿cmake_minimum_required(VERSION 3.10.0)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /MANIFEST:NO")
+set(LIBRARY_OUTPUT_PATH "${CMAKE_CURRENT_LIST_DIR}")
+cmake_policy(SET CMP0057 NEW)
 
-project(cocos-explorer)
+project("GDScenesExplorer")
+set(developer "user95401")
+set(description "GD Scenes Explorer mod made for gd 2.2!!! asd")
+set(lib_output "D:/Games/user666/Geometry Dash 2.204 PC [modloader]/_Mods") # post build copy
 
-add_library(cocos-explorer SHARED src/main.cpp)
+#curly-eureka
+set(GAME_VERSION "2.2")
+include("C:\\Users\\Lenovo\\source\\curly-eureka\\CURLY-EUREKA-INCL.cmake")# "\" must be escaped by \\
 
-target_include_directories(cocos-explorer PRIVATE
-  libraries/imgui-hook
-  libraries/imgui-hook/imgui
-  libraries/minhook/include
+#version
+set(FILEVERSION "1, 0, 0, 0")
+set(LegalCopyright "user666's original")
+configure_file("Version.rc" "../../../src/Version.rc")
+
+#mod
+file(GLOB_RECURSE SRC
+src/*
+#${CURLY_EUREKA_DIR} to include other stuff
 )
+add_library(${PROJECT_NAME} SHARED ${SRC} ${CURLY_EUREKA_SRC})
 
-add_subdirectory(libraries/minhook)
-add_subdirectory(libraries/imgui-hook)
-add_subdirectory(libraries/cocos-headers)
-target_link_libraries(cocos-explorer 
-  cocos2d
-  imgui-hook
-  minhook
-  opengl32
-)
+#POST_BUILD
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND #POST_BUILD UPDATE USES POWERSHELL!
+"${CMAKE_CURRENT_LIST_DIR}/CMakePostBuild.bat" ${developer} ${PROJECT_NAME} ${LIBRARY_OUTPUT_PATH} ${lib_output})

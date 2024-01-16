@@ -4,3 +4,10 @@ Debug/
 Release/
 inject.py
 injector.exe
+#ueaa
+.vs
+.git
+build
+out
+*.lib
+*.dll
